@@ -1,0 +1,49 @@
+.report-detail {
+  width: 90%;
+  max-width: 900px;
+  margin: 30px auto;
+  padding: 20px;
+  font-family: "Segoe UI", sans-serif;
+}
+
+.report-section {
+  margin-bottom: 30px;
+  padding: 15px;
+  background: #f9fafb;
+  border-radius: 8px;
+  box-shadow: 0 0 5px rgba(0,0,0,0.1);
+}
+
+.report-section h3 {
+  color: #2c3e50;
+  margin-bottom: 10px;
+}
+
+.content-table, .category-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 10px;
+}
+
+.content-table td, .category-table td {
+  border: 1px solid #ddd;
+  padding: 8px;
+}
+
+.category-card {
+  background: #fff;
+  margin-top: 10px;
+  padding: 10px;
+  border-radius: 6px;
+  border: 1px solid #e5e7eb;
+}
+
+.points-list {
+  list-style-type: disc;
+  padding-left: 25px;
+}
+
+.category-section h4 {
+  color: #34495e;
+  margin-top: 10px;
+}

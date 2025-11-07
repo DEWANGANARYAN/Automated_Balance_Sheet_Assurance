@@ -1,0 +1,33 @@
+.auth-container, .dashboard, .report-detail {
+  width: 400px;
+  margin: 50px auto;
+  padding: 20px;
+  text-align: center;
+}
+
+.auth-container input, .dashboard input {
+  width: 90%;
+  padding: 10px;
+  margin: 8px 0;
+}
+
+button {
+  padding: 10px 15px;
+  cursor: pointer;
+  border: none;
+  background: #4a90e2;
+  color: white;
+  border-radius: 4px;
+}
+
+button:hover {
+  background: #357ab8;
+}
+
+header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 50px;
+  background: #f2f2f2;
+}

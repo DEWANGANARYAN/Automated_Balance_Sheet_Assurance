@@ -16,4 +16,5 @@ report_text = analyzer.run_analysis()
 reporter = GLReportGenerator(api_key)
 json_report = reporter.generate_report(report_text)
 
-print(json_report)
+# print(json_report)
+print(json_report[8:-4])

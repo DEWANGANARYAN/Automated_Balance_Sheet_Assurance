@@ -1,5 +1,5 @@
 # Automated_Balance_Sheet_Assurance
-By Team: Team Rocket
+By: Team Rocket
 Team Member:
 Aryan Dewangann
 Sagar Mourya
