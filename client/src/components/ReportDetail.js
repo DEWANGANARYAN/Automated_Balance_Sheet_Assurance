@@ -172,6 +172,11 @@ const ReportDetail = () => {
                           Click to Check
                         </button>
                       )}
+                      {status === "submitted" && (
+                      <button onClick={() => openReviewModal(code)} style={buttonStyle.secondary}>
+                      Click to Check
+                      </button>
+                       )}
                     </td>
                   </tr>
                 );

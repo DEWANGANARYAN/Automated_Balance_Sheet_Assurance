@@ -261,7 +261,7 @@ def request_review():
         # New review entry
         review = {
             "report_id": report_id,
-            "username": username,
+            "username": session['username'],
             "gl_range": gl_range,
             "gl_code": gl_code,
             "remark": remark,
@@ -270,12 +270,26 @@ def request_review():
                 {"timestamp": timestamp, "action": "ask_for_review", "by": username}
             ],
             "review_image": None,
+            "message": "Inconsistency found in GL code",
             "last_updated": timestamp
         }
         reviews_collection.insert_one(review)
 
     return jsonify({"status": "success", "gl_code": gl_code, "new_status": "waiting"}), 200
 
+
+@app.route('/my-reviews', methods=['GET'])
+def get_my_reviews():
+    if 'username' not in session:
+        return jsonify({"status": "fail", "message": "User not logged in"}), 401
+
+    username = session['username']
+    assigned_reviews = list(reviews_collection.find({"assigned_to": username}))
+
+    for r in assigned_reviews:
+        r["_id"] = str(r["_id"])
+
+    return jsonify({"status": "success", "reviews": assigned_reviews}), 200
 
 
 
@@ -309,6 +323,42 @@ def update_review_status():
         return jsonify({"status": "fail", "message": "Review not found"}), 404
 
     return jsonify({"status": "success", "decision": decision}), 200
+
+
+@app.route('/submit-review/<review_id>', methods=['POST'])
+def submit_review(review_id):
+    if 'username' not in session:
+        return jsonify({"status": "fail", "message": "User not logged in"}), 401
+
+    username = session['username']
+    review = reviews_collection.find_one({"_id": ObjectId(review_id)})
+
+    if not review:
+        return jsonify({"status": "fail", "message": "Review not found"}), 404
+
+    if review["assigned_to"] != username:
+        return jsonify({"status": "fail", "message": "Unauthorized"}), 403
+
+    text_proof = request.form.get("text")
+    file = request.files.get("file")
+    file_path = None
+
+    if file:
+        os.makedirs("./Proofs", exist_ok=True)
+        file_path = os.path.join("./Proofs", f"{review_id}_{file.filename}")
+        file.save(file_path)
+
+    reviews_collection.update_one(
+        {"_id": ObjectId(review_id)},
+        {"$set": {
+            "status": "submitted",
+            "review_text": text_proof,
+            "review_file": file_path,
+            "submitted_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        }}
+    )
+
+    return jsonify({"status": "success", "message": "Proof submitted successfully"}), 200
 
 
 

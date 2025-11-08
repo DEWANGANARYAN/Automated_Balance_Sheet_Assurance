@@ -28,3 +28,10 @@ export const getReviewLog = async (reportId, glCode) => {
 export const getReportReviews = async (reportId) => {
   return API.get(`/report-reviews/${reportId}`);
 };
+
+export const getMyReviews = async () => API.get("/my-reviews");
+
+export const submitReviewProof = async (id, formData) =>
+  API.post(`/submit-review/${id}`, formData, {
+    headers: { "Content-Type": "multipart/form-data" },
+});
