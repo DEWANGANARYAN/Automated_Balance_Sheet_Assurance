@@ -3,9 +3,13 @@ import pandas as pd
 class GLAnalyzer:
     def __init__(self, df: pd.DataFrame):
         self.df = df.copy()
+        self.fault = {}
         self.text = ""
         self.data = []
         self.ranges = []
+
+    def getFault(self):
+        return self.fault
 
     def _generate_ranges(self, step_size=10_000_000):
         max_gl = int(self.df['GL'].max())
@@ -16,7 +20,6 @@ class GLAnalyzer:
             current += step_size
 
     def _analyze_ranges(self):
-        fault = {}
         for start, end in self.ranges:
             temp = self.df[(self.df['GL'] >= start) & (self.df['GL'] <= end)]
             if temp.empty:
@@ -33,11 +36,11 @@ class GLAnalyzer:
 
             percentage = (pos_count / total) * 100
             if percentage < 50:
-                fault[start] = temp[temp['Amount'] > 0]['GL'].tolist()
-                note = f"{most_occured_name} (ranges {start}-{end} should be negative). Positives: {pos_count} and list of fault is in GL {fault[start]}\n"
+                self.fault[str(start)] = temp[temp['Amount'] > 0]['GL'].tolist()
+                note = f"{most_occured_name} (ranges {start}-{end} should be negative). Positives: {pos_count} and list of fault is in GL {self.fault[str(start)]}\n"
             else:
-                fault[start] = temp[temp['Amount'] < 0]['GL'].tolist()
-                note = f"{most_occured_name} (ranges {start}-{end} should be positive). Negatives: {neg_count} and list of fault is in GL {fault[start]}\n"
+                self.fault[str(start)] = temp[temp['Amount'] < 0]['GL'].tolist()
+                note = f"{most_occured_name} (ranges {start}-{end} should be positive). Negatives: {neg_count} and list of fault is in GL {self.fault[str(start)]}\n"
 
             self.text += note
 

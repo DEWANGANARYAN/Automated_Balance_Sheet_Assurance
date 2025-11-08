@@ -23,6 +23,12 @@ client = MongoClient(MONGO_URI)
 db = client["Finnovate"]
 users_collection = db["users"]
 reports_collection = db["reports"]
+reviews_collection = db["reviews"]
+reviews_collection.create_index("report_id")
+reviews_collection.create_index("gl_code")
+reviews_collection.create_index("username")
+reviews_collection.create_index("status")
+
 
 DATASET_FOLDER = "./Dataset"
 os.makedirs(DATASET_FOLDER, exist_ok=True)
@@ -101,6 +107,8 @@ def upload_excel():
         analyzer = GLAnalyzer(df)
         report_text = analyzer.run_analysis()
 
+        fault = analyzer.getFault()
+
         # 4️⃣ Generate Markdown report file (returns .md file path)
         reporter = GLReportGenerator(api_key)
         report_path = reporter.generate_report(report_text, session['username'])
@@ -115,7 +123,8 @@ def upload_excel():
             "filename": file.filename,        # uploaded file name
             "report_filename": report_filename,  # generated markdown
             "report_path": report_path,       # path to file
-            "uploaded_at": timestamp
+            "uploaded_at": timestamp,
+            "fault": fault,
         }
 
         result = reports_collection.insert_one(report_entry)
@@ -177,30 +186,162 @@ def get_user_reports():
 def get_report_by_id(report_id):
     """
     Fetch and render a specific Markdown report by report_id.
-    Directly returns the .md file using the saved file path.
+    Returns Markdown content, fault dict, and metadata in JSON.
     """
-    
     if 'username' not in session:
         return jsonify({"status": "fail", "message": "User not logged in"}), 401
 
     try:
-        # Find the report document in MongoDB
+        # ✅ 1. Find the report in MongoDB
         report = reports_collection.find_one({"_id": ObjectId(report_id)})
         if not report:
-            return jsonify({"status": "fail", "message": "sReport not found"}), 404
+            return jsonify({"status": "fail", "message": "Report not found"}), 404
 
+        # ✅ 2. Read the Markdown file from disk
         file_path = os.path.normpath(os.path.abspath(report.get("report_path", "")))
         if not os.path.exists(file_path):
             return jsonify({"status": "fail", "message": f"File not found at {file_path}"}), 404
 
-        # ✅ Return the actual .md file
-        return send_file(file_path, mimetype="text/markdown")
+        with open(file_path, "r", encoding="utf-8") as f:
+            markdown_content = f.read()
+
+        # ✅ 3. Build response JSON (includes fault)
+        return jsonify({
+            "status": "success",
+            "markdown": markdown_content,
+            "fault": report.get("fault", {}),  # 🧾 fault dict included here
+            "meta": {
+                "filename": report.get("filename"),
+                "uploaded_at": report.get("uploaded_at")
+            }
+        }), 200
 
     except Exception as e:
         return jsonify({
             "status": "fail",
             "message": f"Error fetching report file: {str(e)}"
         }), 500
+
+
+
+
+@app.route('/request-review', methods=['POST'])
+def request_review():
+    """
+    Create or update a review record for a specific GL code under a report.
+    """
+    data = request.get_json()
+    report_id = data.get("report_id")
+    gl_code = data.get("gl_code")
+    gl_range = data.get("gl_range")
+    remark = data.get("remark", "Inconsistency in Value")
+    username = session.get("username", "unknown_user")
+
+    if not report_id or not gl_code:
+        return jsonify({"status": "fail", "message": "Missing report_id or gl_code"}), 400
+
+    existing = reviews_collection.find_one({"report_id": report_id, "gl_code": gl_code})
+    timestamp = datetime.utcnow().isoformat()
+
+    if existing:
+        # Already exists, just update status and append log
+        reviews_collection.update_one(
+            {"_id": existing["_id"]},
+            {
+                "$set": {
+                    "status": "waiting",
+                    "last_updated": timestamp
+                },
+                "$push": {
+                    "logs": {"timestamp": timestamp, "action": "ask_for_review", "by": username}
+                }
+            }
+        )
+    else:
+        # New review entry
+        review = {
+            "report_id": report_id,
+            "username": username,
+            "gl_range": gl_range,
+            "gl_code": gl_code,
+            "remark": remark,
+            "status": "waiting",
+            "logs": [
+                {"timestamp": timestamp, "action": "ask_for_review", "by": username}
+            ],
+            "review_image": None,
+            "last_updated": timestamp
+        }
+        reviews_collection.insert_one(review)
+
+    return jsonify({"status": "success", "gl_code": gl_code, "new_status": "waiting"}), 200
+
+
+
+
+@app.route('/update-review-status', methods=['POST'])
+def update_review_status():
+    """
+    Update review status (granted or rejected) for a GL code.
+    """
+    data = request.get_json()
+    report_id = data.get("report_id")
+    gl_code = data.get("gl_code")
+    decision = data.get("decision")  # granted | rejected
+    reviewer = session.get("username", "reviewer")
+
+    timestamp = datetime.utcnow().isoformat()
+
+    result = reviews_collection.update_one(
+        {"report_id": report_id, "gl_code": gl_code},
+        {
+            "$set": {
+                "status": decision,
+                "last_updated": timestamp
+            },
+            "$push": {
+                "logs": {"timestamp": timestamp, "action": decision, "by": reviewer}
+            }
+        }
+    )
+
+    if result.modified_count == 0:
+        return jsonify({"status": "fail", "message": "Review not found"}), 404
+
+    return jsonify({"status": "success", "decision": decision}), 200
+
+
+
+
+@app.route('/review-log/<report_id>/<gl_code>', methods=['GET'])
+def get_review_log(report_id, gl_code):
+    """
+    Fetch full review history for a GL code.
+    """
+    review = reviews_collection.find_one(
+        {"report_id": report_id, "gl_code": int(gl_code)},
+        {"_id": 0}
+    )
+    if not review:
+        return jsonify({"status": "fail", "message": "No review found"}), 404
+
+    return jsonify({
+        "status": "success",
+        "gl_code": gl_code,
+        "logs": review.get("logs", []),
+        "current_status": review.get("status", "unknown")
+    }), 200
+
+
+
+@app.route('/report-reviews/<report_id>', methods=['GET'])
+def get_report_reviews(report_id):
+    """
+    Fetch all review statuses for a given report.
+    """
+    reviews = list(reviews_collection.find({"report_id": report_id}, {"_id": 0}))
+    return jsonify({"status": "success", "count": len(reviews), "reviews": reviews}), 200
+
 
 
 
