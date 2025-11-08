@@ -29,6 +29,7 @@ reviews_collection.create_index("gl_code")
 reviews_collection.create_index("username")
 reviews_collection.create_index("status")
 
+z_score = []
 
 DATASET_FOLDER = "./Dataset"
 os.makedirs(DATASET_FOLDER, exist_ok=True)
@@ -108,7 +109,7 @@ def upload_excel():
         report_text = analyzer.run_analysis()
 
         fault = analyzer.getFault()
-
+        z_score = analyzer.getZscore()
         # 4️⃣ Generate Markdown report file (returns .md file path)
         reporter = GLReportGenerator(api_key)
         report_path = reporter.generate_report(report_text, session['username'])
@@ -186,18 +187,17 @@ def get_user_reports():
 def get_report_by_id(report_id):
     """
     Fetch and render a specific Markdown report by report_id.
-    Returns Markdown content, fault dict, and metadata in JSON.
+    Returns Markdown content, fault dict, z_score (from memory), and metadata.
     """
     if 'username' not in session:
         return jsonify({"status": "fail", "message": "User not logged in"}), 401
 
     try:
-        # ✅ 1. Find the report in MongoDB
+        # ✅ Get the report as before
         report = reports_collection.find_one({"_id": ObjectId(report_id)})
         if not report:
             return jsonify({"status": "fail", "message": "Report not found"}), 404
 
-        # ✅ 2. Read the Markdown file from disk
         file_path = os.path.normpath(os.path.abspath(report.get("report_path", "")))
         if not os.path.exists(file_path):
             return jsonify({"status": "fail", "message": f"File not found at {file_path}"}), 404
@@ -205,11 +205,11 @@ def get_report_by_id(report_id):
         with open(file_path, "r", encoding="utf-8") as f:
             markdown_content = f.read()
 
-        # ✅ 3. Build response JSON (includes fault)
         return jsonify({
             "status": "success",
             "markdown": markdown_content,
-            "fault": report.get("fault", {}),  # 🧾 fault dict included here
+            "fault": report.get("fault", {}),
+            "z_score": z_score,  # 🧠 use directly from memory
             "meta": {
                 "filename": report.get("filename"),
                 "uploaded_at": report.get("uploaded_at")

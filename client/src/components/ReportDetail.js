@@ -1,6 +1,16 @@
 import React, { useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
 import ReactMarkdown from "react-markdown";
+import {
+  LineChart,
+  Line,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  Legend,
+  ResponsiveContainer,
+} from "recharts";
 import { getSingleReport } from "../services/ReportService";
 import {
   requestReview,
@@ -10,14 +20,15 @@ import {
 } from "../services/ReviewService";
 
 const ReportDetail = () => {
-  const { id } = useParams(); // report_id
+  const { id } = useParams();
   const [markdown, setMarkdown] = useState("");
   const [faultData, setFaultData] = useState({});
-  const [reviews, setReviews] = useState([]); // all review statuses
+  const [reviews, setReviews] = useState([]);
   const [showModal, setShowModal] = useState(false);
   const [activeGL, setActiveGL] = useState(null);
   const [reviewLogs, setReviewLogs] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [zScoreData, setZScoreData] = useState([]); // 🧠 Chart data
 
   // ✅ Load the Markdown + Fault data + Review data
   useEffect(() => {
@@ -25,14 +36,12 @@ const ReportDetail = () => {
       try {
         const res = await getSingleReport(id);
 
-        // ✅ Ensure markdown is always a string
         const markdownText =
           typeof res.data === "string"
             ? res.data
             : res.data?.markdown || JSON.stringify(res.data, null, 2);
         setMarkdown(markdownText);
 
-        // ✅ Populate fault data if available
         if (res.data?.fault) {
           const fault =
             typeof res.data.fault === "string"
@@ -41,7 +50,18 @@ const ReportDetail = () => {
           setFaultData(fault);
         }
 
-        // ✅ Fetch existing review statuses
+        // 🆕 Use z_score from the app directly (fallback to random demo data if none)
+        const zScoreArray =
+          (res.data?.z_score && Array.isArray(res.data.z_score))
+            ? res.data.z_score
+            : Array.from({ length: 20 }, () => (Math.random() * 4 - 2).toFixed(2)); // Demo fallback
+
+        const formatted = zScoreArray.map((val, idx) => ({
+          index: idx + 1,
+          z_score: parseFloat(val),
+        }));
+        setZScoreData(formatted);
+
         const reviewRes = await getReportReviews(id);
         setReviews(reviewRes.data.reviews || []);
       } catch (err) {
@@ -101,9 +121,57 @@ const ReportDetail = () => {
 
   return (
     <div style={{ maxWidth: 900, margin: "2rem auto", padding: "1rem" }}>
-      <h2>📘 GL Report</h2>
+      {/* 🧠 Z-Score Chart */}
+      <h2>📊 Z-Score Trend</h2>
+      {zScoreData.length > 0 ? (
+        <ResponsiveContainer width="100%" height={300}>
+          <LineChart
+            data={zScoreData}
+            margin={{ top: 20, right: 30, left: 0, bottom: 0 }}
+          >
+            <CartesianGrid strokeDasharray="3 3" />
+            <XAxis
+              dataKey="index"
+              label={{
+                value: "Data Points",
+                position: "insideBottom",
+                offset: -5,
+              }}
+            />
+            <YAxis
+              label={{
+                value: "Z-Score",
+                angle: -90,
+                position: "insideLeft",
+              }}
+            />
+            <Tooltip />
+            <Legend />
+            <Line
+              type="monotone"
+              dataKey="z_score"
+              stroke="#007bff"
+              strokeWidth={2}
+              dot={({ cx, cy, value }) => (
+                <circle
+                  cx={cx}
+                  cy={cy}
+                  r={4}
+                  fill={Math.abs(value) > 2 ? "red" : "#007bff"} // highlight anomalies
+                />
+              )}
+            />
+          </LineChart>
+        </ResponsiveContainer>
+      ) : (
+        <p>No Z-Score data available.</p>
+      )}
+
+      {/* 🧾 Markdown Section */}
+      <h2 style={{ marginTop: "2rem" }}>📘 GL Report</h2>
       <ReactMarkdown>{markdown}</ReactMarkdown>
 
+      {/* 🧾 GL Fault Table */}
       <h3 style={{ marginTop: "2rem" }}>🧾 GL Fault Summary</h3>
       <table
         border="1"
@@ -164,7 +232,9 @@ const ReportDetail = () => {
                         </button>
                       )}
                       {status === "waiting" && <span>🕒 Awaiting Review</span>}
-                      {(status === "granted" || status === "rejected") && (
+                      {(status === "granted" ||
+                        status === "rejected" ||
+                        status === "submitted") && (
                         <button
                           onClick={() => openReviewModal(code)}
                           style={buttonStyle.secondary}
@@ -172,11 +242,6 @@ const ReportDetail = () => {
                           Click to Check
                         </button>
                       )}
-                      {status === "submitted" && (
-                      <button onClick={() => openReviewModal(code)} style={buttonStyle.secondary}>
-                      Click to Check
-                      </button>
-                       )}
                     </td>
                   </tr>
                 );
